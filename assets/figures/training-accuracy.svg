@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="430" viewBox="0 0 720 430" role="img" aria-labelledby="title desc">
+  <title id="title">Visualization of Training Accuracy Result</title>
+  <desc id="desc">Line graph showing training accuracy increasing over 30 epochs.</desc>
+  <rect width="720" height="430" fill="#ffffff"/>
+  <text x="360" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#222">Visualization of Training Accuracy Result</text>
+  <line x1="90" y1="345" x2="660" y2="345" stroke="#333" stroke-width="1.5"/>
+  <line x1="90" y1="60" x2="90" y2="345" stroke="#333" stroke-width="1.5"/>
+  <g font-family="Arial, sans-serif" font-size="12" fill="#333">
+    <text x="84" y="349" text-anchor="end">0.0</text>
+    <text x="84" y="292" text-anchor="end">0.2</text>
+    <text x="84" y="235" text-anchor="end">0.4</text>
+    <text x="84" y="178" text-anchor="end">0.6</text>
+    <text x="84" y="121" text-anchor="end">0.8</text>
+    <text x="90" y="365" text-anchor="middle">0</text>
+    <text x="185" y="365" text-anchor="middle">5</text>
+    <text x="280" y="365" text-anchor="middle">10</text>
+    <text x="375" y="365" text-anchor="middle">15</text>
+    <text x="470" y="365" text-anchor="middle">20</text>
+    <text x="565" y="365" text-anchor="middle">25</text>
+    <text x="660" y="365" text-anchor="middle">30</text>
+    <text x="375" y="400" text-anchor="middle">Epochs</text>
+    <text x="24" y="205" text-anchor="middle" transform="rotate(-90 24 205)">Training Accuracy</text>
+  </g>
+  <g stroke="#e57373" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="109,333.6 147,316.5 185,282.3 223,242.4 261,213.9 299,188.3 337,176.9 375,156.9 413,148.4 451,134.1 489,128.4 527,116.9 565,116.9 603,111.2 641,103.2 660,105.5"/>
+  </g>
+</svg>

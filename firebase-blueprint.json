@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile for farmers and auditors",
+      "type": "object",
+      "properties": {
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["farmer", "auditor1", "auditor2"] },
+        "name": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["phone", "role"]
+    },
+    "Farm": {
+      "title": "Farm",
+      "description": "Agricultural land and certification data",
+      "type": "object",
+      "properties": {
+        "farmerId": { "type": "string", "description": "Reference to the owner user" },
+        "cropType": { "type": "string" },
+        "soilType": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "cropPhoto": { "type": "string" },
+        "productImage": { "type": "string" },
+        "plantImage": { "type": "string" },
+        "iotData": {
+          "type": "object",
+          "properties": {
+            "moisture": { "type": "number" },
+            "ph": { "type": "number" },
+            "temperature": { "type": "number" }
+          }
+        },
+        "status": { 
+          "type": "string", 
+          "enum": ["pending", "auditor1_verified", "auditor2_verified", "ai_analyzed", "certified", "failed_ai_verification"] 
+        },
+        "aiReport": { "type": "object" },
+        "certificateHash": { "type": "string" },
+        "qrCodes": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Individual user profiles"
+    },
+    "/farms/{farmId}": {
+      "schema": "Farm",
+      "description": "Certification data for farms"
+    }
+  }
+}

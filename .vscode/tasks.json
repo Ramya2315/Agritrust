@@ -1,0 +1,23 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "npm: dev",
+            "type": "npm",
+            "script": "dev",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "agritrustra",
+                "pattern": {
+                    "regexp": "^$^(.+)$",
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^> react-example@0\\.0\\.0 dev$",
+                    "endsPattern": "^\\[AgriTrustra\\] Development server is ready$"
+                }
+            }
+        }
+    ]
+}

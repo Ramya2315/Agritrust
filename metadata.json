@@ -1,0 +1,5 @@
+{
+  "name": "AgriTrustra",
+  "description": "Blockchain-verified organic certification and AI-driven crop analysis platform.",
+  "requestFramePermissions": ["geolocation"]
+}
