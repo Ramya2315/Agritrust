@@ -3,7 +3,7 @@ services:
     name: agritrustra
     runtime: node
     plan: free
-    buildCommand: npm install && npm run ml:install && npm run build:prod
+    buildCommand: npm install && npm run build:prod
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
