@@ -98,6 +98,44 @@ const isValidOtpPurpose = (value: string): value is OtpPurpose =>
   OTP_PURPOSES.includes(value as OtpPurpose);
 const generateOtpCode = () => randomInt(0, 1000000).toString().padStart(6, "0");
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email));
+const normalizeTextField = (value: any) => String(value || "").trim();
+const buildAddressFromDetails = (details: any = {}) =>
+  [details.city, details.state, details.country, details.pincode]
+    .map(value => normalizeTextField(value))
+    .filter(Boolean)
+    .join(", ");
+const normalizeAddressDetails = (input: any = {}) => ({
+  city: normalizeTextField(input.city),
+  state: normalizeTextField(input.state),
+  country: normalizeTextField(input.country),
+  pincode: normalizeTextField(input.pincode).replace(/\D/g, "").slice(0, 10)
+});
+const normalizeLocation = (input: any = {}) => {
+  const lat = Number(input.lat);
+  const lng = Number(input.lng);
+  const accuracy = Number(input.accuracy);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return undefined;
+  }
+
+  return {
+    lat,
+    lng,
+    accuracy: Number.isFinite(accuracy) ? accuracy : undefined
+  };
+};
+const toPublicUser = (user: any) => ({
+  id: user._id,
+  role: user.role,
+  name: user.name,
+  phone: user.phone,
+  email: user.email,
+  address: user.address || "",
+  addressDetails: user.addressDetails || {},
+  location: user.location || null,
+  verificationStatus: user.verificationStatus
+});
 
 const getOtpAction = (purpose: OtpPurpose) => {
   if (purpose === "register") return "complete your AgriTrustra registration";
@@ -172,13 +210,15 @@ const sendEmailMessage = async ({
   }
 
   const transporter = getOtpMailer();
-  await transporter.sendMail({
+  const info = await transporter.sendMail({
     from: EMAIL_FROM,
     to,
     subject,
     text,
     html: html || `<pre>${text}</pre>`
   });
+
+  console.log(`[AgriTrustra][Email] Sent message to ${to}. messageId=${info.messageId}`);
   return { delivery: "email" as const };
 };
 
@@ -186,13 +226,21 @@ const sendOtpViaEmail = async (email: string, otp: string, purpose: OtpPurpose) 
   const transporter = getOtpMailer();
   const { subject, text, html } = buildOtpEmail(otp, purpose);
 
-  await transporter.sendMail({
-    from: EMAIL_FROM,
-    to: email,
-    subject,
-    text,
-    html
-  });
+  try {
+    const info = await transporter.sendMail({
+      from: EMAIL_FROM,
+      to: email,
+      subject,
+      text,
+      html
+    });
+
+    console.log(`[AgriTrustra][OTP][EMAIL] Sent ${purpose} OTP to ${email}. messageId=${info.messageId}`);
+    return info;
+  } catch (err: any) {
+    console.error(`[AgriTrustra][OTP][EMAIL] Failed to send ${purpose} OTP to ${email}:`, err?.message || err);
+    throw err;
+  }
 };
 
 const deliverEmailOtp = async (email: string, otp: string, purpose: OtpPurpose) => {
@@ -987,6 +1035,17 @@ const UserSchema = new mongoose.Schema({
   role: { type: String, enum: ["farmer", "auditor1", "auditor2"], default: "farmer" },
   name: String,
   address: String,
+  addressDetails: {
+    city: String,
+    state: String,
+    country: String,
+    pincode: String
+  },
+  location: {
+    lat: Number,
+    lng: Number,
+    accuracy: Number
+  },
   verificationStatus: {
     emailVerified: { type: Boolean, default: false },
     otpVerified: { type: Boolean, default: false },
@@ -1486,9 +1545,17 @@ app.post("/api/auth/send-otp", async (req, res) => {
 
 app.post("/api/auth/register", async (req, res) => {
   try {
-    const { phone, email, password, role, name, address, otp } = req.body;
+    const { phone, email, password, role, name, otp } = req.body;
     const normalizedPhone = normalizePhone(String(phone || ""));
     const normalizedEmail = normalizeEmail(String(email || ""));
+    const addressDetails = normalizeAddressDetails({
+      city: req.body?.city ?? req.body?.addressDetails?.city,
+      state: req.body?.state ?? req.body?.addressDetails?.state,
+      country: req.body?.country ?? req.body?.addressDetails?.country,
+      pincode: req.body?.pincode ?? req.body?.addressDetails?.pincode
+    });
+    const address = normalizeTextField(req.body?.address) || buildAddressFromDetails(addressDetails);
+    const location = normalizeLocation(req.body?.location);
 
     if (!normalizedPhone || normalizedPhone.length < 10) {
       return res.status(400).json({ error: "Valid phone number is required" });
@@ -1496,6 +1563,10 @@ app.post("/api/auth/register", async (req, res) => {
 
     if (!isValidEmail(normalizedEmail)) {
       return res.status(400).json({ error: "Valid email address is required" });
+    }
+
+    if (!addressDetails.city || !addressDetails.state || !addressDetails.country || !addressDetails.pincode) {
+      return res.status(400).json({ error: "City, state, country, and pincode are required" });
     }
 
     const existingPhoneUser = await findUserByPhone(normalizedPhone);
@@ -1528,6 +1599,8 @@ app.post("/api/auth/register", async (req, res) => {
         role, 
         name, 
         address,
+        addressDetails,
+        location,
         verificationStatus: {
           emailVerified: true,
           otpVerified: true,
@@ -1545,6 +1618,8 @@ app.post("/api/auth/register", async (req, res) => {
         role, 
         name, 
         address,
+        addressDetails,
+        location,
         verificationStatus: {
           emailVerified: true,
           otpVerified: true,
@@ -1557,15 +1632,7 @@ app.post("/api/auth/register", async (req, res) => {
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET);
     res.json({ 
       token, 
-      user: { 
-        id: user._id, 
-        role: user.role, 
-        name: user.name,
-        phone: normalizedPhone,
-        email: normalizedEmail,
-        address: user.address || "",
-        verificationStatus: (user as any).verificationStatus
-      } 
+      user: toPublicUser(user)
     });
   } catch (err: any) {
     console.error("Registration error:", err);
@@ -1597,14 +1664,7 @@ app.post("/api/auth/login", async (req, res) => {
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET);
     res.json({
       token,
-      user: {
-        id: user._id,
-        role: user.role,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        address: user.address || ""
-      }
+      user: toPublicUser(user)
     });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Login failed" });
@@ -1650,14 +1710,7 @@ app.patch("/api/auth/profile", authenticate, async (req: any, res) => {
     }
 
     res.json({
-      user: {
-        id: user._id,
-        role: user.role,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        address: user.address || ""
-      }
+      user: toPublicUser(user)
     });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Profile update failed" });

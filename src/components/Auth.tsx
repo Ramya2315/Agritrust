@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { AlertCircle, Check, Leaf, Lock, Mail, Smartphone } from "lucide-react";
+import { AlertCircle, Check, Leaf, LocateFixed, Lock, Mail, MapPin, Smartphone } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,11 +21,14 @@ const emptyOtpState = {
 };
 
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+const buildAddress = (city: string, state: string, country: string, pincode: string) =>
+  [city, state, country, pincode].map(value => value.trim()).filter(Boolean).join(", ");
 
 export default function Auth({ onLogin }: AuthProps) {
   const otpInputRef = useRef<HTMLInputElement | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "register" | "forgot">("login");
   const [isLoading, setIsLoading] = useState(false);
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [showOtp, setShowOtp] = useState(false);
   const [otpState, setOtpState] = useState(emptyOtpState);
   const [formData, setFormData] = useState({
@@ -35,7 +38,17 @@ export default function Auth({ onLogin }: AuthProps) {
     confirmPassword: "",
     name: "",
     role: "farmer",
-    otp: ""
+    otp: "",
+    city: "",
+    state: "",
+    country: "",
+    pincode: "",
+    address: "",
+    location: {
+      lat: 0,
+      lng: 0,
+      accuracy: null as number | null
+    }
   });
 
   const emailLooksValid = isValidEmail(formData.email);
@@ -102,8 +115,83 @@ export default function Auth({ onLogin }: AuthProps) {
       confirmPassword: "",
       name: "",
       role: "farmer",
-      otp: ""
+      otp: "",
+      city: "",
+      state: "",
+      country: "",
+      pincode: "",
+      address: "",
+      location: {
+        lat: 0,
+        lng: 0,
+        accuracy: null
+      }
     });
+  };
+
+  const updateAddressField = (field: "city" | "state" | "country" | "pincode", value: string) => {
+    if (showOtp) return;
+    setFormData(prev => {
+      const next = { ...prev, [field]: field === "pincode" ? value.replace(/\D/g, "").slice(0, 10) : value };
+      return {
+        ...next,
+        address: buildAddress(next.city, next.state, next.country, next.pincode)
+      };
+    });
+  };
+
+  const detectLiveLocation = async () => {
+    if (showOtp) return;
+    if (!navigator.geolocation) {
+      toast.error("Location detection is not available in this browser");
+      return;
+    }
+
+    setIsDetectingLocation(true);
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0
+        });
+      });
+
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`
+      );
+      const data = response.ok ? await response.json() : {};
+      const address = data.address || {};
+      const city = address.city || address.town || address.village || address.hamlet || address.county || "";
+      const state = address.state || address.region || "";
+      const country = address.country || "";
+      const pincode = address.postcode || "";
+      const formattedAddress = data.display_name || buildAddress(city, state, country, pincode);
+
+      setFormData(prev => ({
+        ...prev,
+        city: city || prev.city,
+        state: state || prev.state,
+        country: country || prev.country,
+        pincode: pincode || prev.pincode,
+        address: formattedAddress || buildAddress(city || prev.city, state || prev.state, country || prev.country, pincode || prev.pincode),
+        location: {
+          lat,
+          lng,
+          accuracy: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null
+        }
+      }));
+      toast.success("Live location detected");
+    } catch (err: any) {
+      const message = err?.code === 1
+        ? "Please allow location permission to detect your live location"
+        : "Could not detect live location. Enter address manually.";
+      toast.error(message);
+    } finally {
+      setIsDetectingLocation(false);
+    }
   };
 
   const requestOtp = async () => {
@@ -148,6 +236,14 @@ export default function Auth({ onLogin }: AuthProps) {
         return;
       }
 
+      if (authMode === "register") {
+        if (!formData.city.trim() || !formData.state.trim() || !formData.country.trim() || !formData.pincode.trim()) {
+          toast.error("Please enter city, state, country, and pincode");
+          setIsLoading(false);
+          return;
+        }
+      }
+
       if (!showOtp) {
         await requestOtp();
         setIsLoading(false);
@@ -182,7 +278,10 @@ export default function Auth({ onLogin }: AuthProps) {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          address: formData.address || buildAddress(formData.city, formData.state, formData.country, formData.pincode)
+        })
       });
 
       const data = await response.json();
@@ -226,7 +325,7 @@ export default function Auth({ onLogin }: AuthProps) {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative z-10 w-full max-w-md px-4"
+        className="relative z-10 w-full max-w-lg px-4"
       >
         <Card className="border-none shadow-2xl bg-white/95 backdrop-blur-md">
           <CardHeader className="text-center">
@@ -318,6 +417,83 @@ export default function Auth({ onLogin }: AuthProps) {
                   </div>
                   <p className="text-xs text-muted-foreground">Enter your phone number for account records; OTP will be delivered to your email.</p>
                 </div>
+
+                  <div className="space-y-3 rounded-lg border border-green-100 bg-green-50/60 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-green-600" />
+                        Address
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-2"
+                        disabled={showOtp || isDetectingLocation}
+                        onClick={detectLiveLocation}
+                      >
+                        <LocateFixed className="h-4 w-4" />
+                        {isDetectingLocation ? "Detecting..." : "Detect live location"}
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="city">City <span className="text-red-500">*</span></Label>
+                        <Input
+                          id="city"
+                          required
+                          disabled={showOtp}
+                          value={formData.city}
+                          onChange={(e) => updateAddressField("city", e.target.value)}
+                          placeholder="City"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="state">State <span className="text-red-500">*</span></Label>
+                        <Input
+                          id="state"
+                          required
+                          disabled={showOtp}
+                          value={formData.state}
+                          onChange={(e) => updateAddressField("state", e.target.value)}
+                          placeholder="State"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="country">Country <span className="text-red-500">*</span></Label>
+                        <Input
+                          id="country"
+                          required
+                          disabled={showOtp}
+                          value={formData.country}
+                          onChange={(e) => updateAddressField("country", e.target.value)}
+                          placeholder="Country"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="pincode">Pincode <span className="text-red-500">*</span></Label>
+                        <Input
+                          id="pincode"
+                          required
+                          disabled={showOtp}
+                          value={formData.pincode}
+                          onChange={(e) => updateAddressField("pincode", e.target.value)}
+                          placeholder="Pincode"
+                          inputMode="numeric"
+                        />
+                      </div>
+                    </div>
+
+                    {(formData.location.lat || formData.location.lng) ? (
+                      <p className="text-xs text-green-800">
+                        GPS: {formData.location.lat.toFixed(6)}, {formData.location.lng.toFixed(6)}
+                        {formData.location.accuracy ? ` (${Math.round(formData.location.accuracy)}m accuracy)` : ""}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Use live detection to auto-fill address and save GPS coordinates.</p>
+                    )}
+                  </div>
 
                 </>
               )}
